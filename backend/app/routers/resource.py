@@ -21,6 +21,49 @@ def require_service(module: str):
     return service
 
 
+@router.get("/dq_check_run/stats", response_model=dict)
+def check_run_stats(task_id: str | None = Query(default=None)) -> dict[str, Any]:
+    """巡检入口取数：通过/失败/跳过/未执行分项统计，范围外不进分母。"""
+    return require_service("dq_check_run").inspection_stats(task_id)
+
+
+@router.post("/dq_check_run/{task_id}/late-results", response_model=dict)
+def check_run_late_results(task_id: str, payload: EntryPayload) -> dict[str, Any]:
+    """迟到分区补算：把后到的规则结果合并回同一巡检轮次。"""
+    service = require_service("dq_check_run")
+    results = payload.values.get("规则明细") or payload.values.get("results") or []
+    summary = service.record_late_results(task_id, results)
+    if summary is None:
+        raise HTTPException(status_code=404, detail=f"巡检轮次 {task_id} 不存在")
+    return summary
+
+
+@router.get("/dq_report/{report_id}/recheck", response_model=dict)
+def report_recheck_panel(report_id: int) -> dict[str, Any]:
+    """日报复查面板：按表区分未执行与执行失败，给出待复查清单。"""
+    service = require_service("dq_report")
+    if service.get_entry(report_id) is None:
+        raise HTTPException(status_code=404, detail=f"质量报告 {report_id} 不存在或已归档")
+    return service.recheck_panel(report_id)
+
+
+@router.post("/dq_report/{report_id}/recheck/confirm", response_model=dict)
+def report_recheck_confirm(report_id: int, payload: EntryPayload) -> dict[str, Any]:
+    """记录日报复查确认；迟到补算刷新统计时保留该确认数据。"""
+    service = require_service("dq_report")
+    values = payload.values
+    result = service.confirm_recheck(
+        report_id,
+        str(values.get("目标表名") or values.get("table_name") or ""),
+        operator=str(values.get("确认人") or values.get("operator") or "值班人员"),
+        conclusion=str(values.get("确认结论") or values.get("conclusion") or ""),
+        note=str(values.get("复查备注") or values.get("note") or ""),
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="质量报告或目标表不存在")
+    return result
+
+
 @router.get("/{module}", response_model=PageResult[dict])
 def list_entries(
     module: str,

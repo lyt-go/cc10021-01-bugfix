@@ -22,6 +22,9 @@
       </article>
     </div>
 
+    <InspectionSummary v-if="meta.key === 'dq_check_run'" />
+    <ReportRecheckPanel v-if="meta.key === 'dq_report'" :module-key="meta.key" />
+
     <p class="status-legend">
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
         {{ item.status }}：{{ item.count }}
@@ -104,6 +107,8 @@ import {
   runAction as applyAction,
 } from '@/api/backend-service'
 import type { EntryRow } from '@/data/types'
+import InspectionSummary from '@/views/InspectionSummary.vue'
+import ReportRecheckPanel from '@/views/ReportRecheckPanel.vue'
 
 const props = defineProps<{ moduleKey: string }>()
 const meta = moduleMeta(props.moduleKey)
